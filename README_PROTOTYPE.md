@@ -1,25 +1,21 @@
-valokwsp Prototype
-====================
+valokwsp discord bot prototype
+==============================
 
-This is a small prototype FastAPI app that serves fake Valorant data for demonstration purposes. Use this to show Riot what your app will request and how you will present data.
+this bot is a prototype for the future valokwsp discord bot. the purpose of this version is to test core features before full integration with the riot games api.
 
-Run locally (PowerShell):
+currently, we do not have access to riot's production api and are operating in a prototype environment until approval is received. once api access is granted, the bot will transition to a full release including match tracking, rr updates, and player performance features.
 
-```powershell
-python -m pip install -r requirements.txt
-uvicorn prototype_app:APP --reload
-```
+features planned:
+- track valorant match rr gains/losses
+- notify friends when someone starts a match
+- performance summaries after each game
+- player stats + seasonal history
+- optional web dashboard integration
 
-Endpoints:
-- GET /players
-- GET /players/{ign}/{tag}
-- GET /players/{ign}/{tag}/matches
+temporary prototype focus:
+- command structure
+- message formatting + ui behavior
+- performance and logging
+- internal utilities
 
-Example GET:
-```powershell
-curl http://127.0.0.1:8000/players
-curl http://127.0.0.1:8000/players/Shadow/001
-curl http://127.0.0.1:8000/players/Shadow/001/matches
-```
-
-Note: This is a mock service and does not call Riot's API. It is intended solely to demonstrate the product to Riot for requesting API access.
+this is not the final version. more features and structure will be added once riot api access is fully approved.

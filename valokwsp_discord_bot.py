@@ -1,22 +1,25 @@
+# -*- coding: utf-8 -*-
+
 import discord
 from discord import app_commands
 from discord.ext import commands
 import logging
-from dotenv import load_dotenv
 import os
-
-load_dotenv()
+import get_info
 
 
 # -_-_-_-_-_-_-_-_-_-_- BOT SETUP -_-_-_-_-_-_-_-_-_-_- #
+# load .env variables
+get_info.load_env()
 
-
-#imports from .env file
-token = os.getenv('DISCORD_TOKEN')
-guild = discord.Object(id=int(os.getenv('DISCORD_GUILD_ID')))
+#imports from .env file 
+token = os.getenv('DISCORD_TOKEN') #str
+guild = discord.Object(id=int(os.getenv('DISCORD_GUILD_ID'))) #discord.Object
+api_key = os.environ.get("RIOT_API_KEY") #str
+base = os.environ.get("RIOT_API_BASE") #str
 
 # handler and intents
-handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
+handler = logging.FileHandler(filename='zzz_discord.log', encoding='utf-8', mode='w')
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
@@ -24,6 +27,7 @@ intents.members = True
 # bot initialization
 bot = commands.Bot(command_prefix='aaskwsp ', intents=intents)
 
+DEBUG = True
 
 # -_-_-_-_-_-_-_-_-_-_- BOT EVENTS -_-_-_-_-_-_-_-_-_-_- #
 
@@ -60,9 +64,45 @@ async def hello(ctx: discord.Interaction):
 @bot.tree.command(name = "dev", description = "check out the dev ;3", guild=guild)
 async def dev(ctx: discord.Interaction):
     embed = discord.Embed(title="aakwsp :3", description="i am the dev", url="https://linktr.ee/aakwsp", color=0xa872db)
+    
     embed.set_thumbnail(url="https://media.discordapp.net/attachments/918728147472621601/1426827337571373116/basil.jpeg?ex=68eca402&is=68eb5282&hm=e31fc04ab2b1dba9c94ba4cf53cd0d2499fabf9100f91195c219163e09afc30d&=&format=webp")
     await ctx.response.send_message(embed=embed)
 
+@bot.tree.command(name="findaccount", description="get puuid", guild=guild)
+@app_commands.describe(name="ign", tag="tag", region="region")
+@app_commands.choices(region=[
+    app_commands.Choice(name="Americas", value="americas"),
+    app_commands.Choice(name="Europe", value="europe"),
+    app_commands.Choice(name="Asia", value="asia"),
+])
+async def findaccount(ctx: discord.Interaction, name: str, tag: str, region: str):
+    endpoint = "riot/account/v1/accounts/by-riot-id"
+
+    if DEBUG: print(f"NAME:{name}, TAG:{tag}, REGION:{region}\n")
+
+    raw = get_info.from_endpoint(region, name, tag, base, endpoint, api_key)
+
+    if raw is None:
+        print(raw)
+        embed = discord.Embed(
+            title="error", 
+            description="could not find account, please check the spelling and try again", 
+            color=discord.Color.red())
+        await ctx.response.send_message(embed=embed)
+        return
+
+    puuid = raw['puuid']
+    name = raw['gameName']
+    tag = raw['tagLine']
+
+    if DEBUG: print(f"PUUID: {puuid}\n")
+    
+    embed = discord.Embed(
+        title="account added", 
+        description=f"riot id {name}#{tag} \nwith puuid: {puuid}", 
+        color=discord.Color.green())
+    
+    await ctx.response.send_message(embed=embed)
 # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 # add player command
 @bot.tree.command(name="addaccount", description="track a valorant account", guild=guild)

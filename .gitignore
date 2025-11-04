@@ -1,2 +1,10 @@
 .env
-discord.log
+
+zzz_discord.log
+zzz_test.py
+zzz_toggle_bot.ps1
+zzz_fake_valo_db.json
+
+__pycache__
+.bot_toggle/
+.venv
