@@ -6,6 +6,7 @@ from discord.ext import commands
 import logging
 import os
 import get_info
+from typing import Tuple 
 
 
 # -_-_-_-_-_-_-_-_-_-_- BOT SETUP -_-_-_-_-_-_-_-_-_-_- #
@@ -28,6 +29,63 @@ intents.members = True
 bot = commands.Bot(command_prefix='aaskwsp ', intents=intents)
 
 DEBUG = True
+
+# -_-_-_-_-_-_-_-_-_-_- HELPER FUNCTIONS -_-_-_-_-_-_-_-_-_-_- #
+
+def decode_riot_api_error(status: dict) -> Tuple[str, str]:
+    '''
+    decodes the error from the API response.
+    helper function for parse_riot_api_error
+
+    returns:
+    Tuple[str, str]: (error_code, error_message)
+    '''
+    custom_error_messages = {
+        400: "Bad request. Check your input format.",
+        401: "Unauthorized. Your API key is invalid or expired.",
+        403: "Forbidden. You don't have permission or your API key is restricted.",
+        404: "Account not found. Check IGN, tag, and region.",
+        408: "Request timed out. Riot servers may be slow.",
+        429: "Rate limit hit. Slow down your requests.",
+        500: "Riot server error. Try again later.",
+        502: "Bad gateway. Riot servers are having issues.",
+        503: "Service unavailable. Riot is down.",
+        504: "Gateway timeout. Riot server took too long."
+    }
+    
+    code = status.get('status_code')
+
+    # error has error code, (replace with custom message)
+    if code in custom_error_messages:
+        return code, custom_error_messages[code]
+
+    # most likely a new error code not in the dictionary
+    return code, "error code not in dictionary"
+
+def parse_riot_api_error(raw) -> Tuple[str, str] | None:
+    '''Checks if the API response contains an error. 
+    
+    returns:
+    Tuple[str, str]: (error_code, error_message) if error exists
+    None: if no error
+    '''
+
+    # raw is missing or wrong type
+    if not isinstance(raw, dict):
+        return "UNKNOWN", "api returned invalid response"
+
+    status = raw.get("status")
+
+    # not an error if it doesnt have status
+    if not isinstance(status, dict):
+        return None
+    
+    code = status.get("status_code")
+
+    # error has error code, (custom error codes)
+    return decode_riot_api_error(status)
+
+
 
 # -_-_-_-_-_-_-_-_-_-_- BOT EVENTS -_-_-_-_-_-_-_-_-_-_- #
 
@@ -77,33 +135,34 @@ async def dev(ctx: discord.Interaction):
 ])
 async def findaccount(ctx: discord.Interaction, name: str, tag: str, region: str):
     endpoint = "riot/account/v1/accounts/by-riot-id"
-
     if DEBUG: print(f"NAME:{name}, TAG:{tag}, REGION:{region}\n")
-
     raw = get_info.from_endpoint(region, name, tag, base, endpoint, api_key)
+    error = parse_riot_api_error(raw)
 
-    if raw is None:
-        print(raw)
+    # if it has error, send error message and return
+    if error != None:
+        error_code, error_message = error
+        if DEBUG: print(f"error found: {error_code}: {error_message}\n")
         embed = discord.Embed(
-            title="error", 
-            description="could not find account, please check the spelling and try again", 
-            color=discord.Color.red())
-        await ctx.response.send_message(embed=embed)
-        return
+            title="an error has occurred", 
+            description=f"error code: {error_code}\nmessage: {error_message}", 
+            color=discord.Color.red()
+        )
 
-    puuid = raw['puuid']
-    name = raw['gameName']
-    tag = raw['tagLine']
-
-    if DEBUG: print(f"PUUID: {puuid}\n")
-    
-    embed = discord.Embed(
-        title="account added", 
-        description=f"riot id {name}#{tag} \nwith puuid: {puuid}", 
-        color=discord.Color.green())
+    else: 
+        puuid = raw['puuid']
+        gameName = raw['gameName']
+        tagLine = raw['tagLine']
+        if DEBUG: print(f"account found: {gameName}#{tagLine}\npuuid: {puuid}\n")
+        embed = discord.Embed(
+            title="account found", 
+            description=f"riot id {gameName}#{tagLine} \npuuid: {puuid}", 
+            color=discord.Color.green()
+        )
     
     await ctx.response.send_message(embed=embed)
 # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
 # add player command
 @bot.tree.command(name="addaccount", description="track a valorant account", guild=guild)
 @app_commands.describe(ign="in-game name", tag="in-game tag")

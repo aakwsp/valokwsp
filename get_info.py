@@ -16,9 +16,10 @@ import sys  # for exiting code
 import urllib.error  # exceptions raised by urllib
 import urllib.parse  # for safely escaping path components in URLs
 import urllib.request  # for making HTTP requests without third-party libs
-from typing import Optional, Tuple  # typing helpers for function signatures
+from typing import Optional, Tuple, Any  # typing helpers for function signatures
 
-VALID_REGIONS = ["americas", "asia", "europe"]
+puuid_regions = ["americas", "asia", "europe"] # regions for puuid lookup
+valorant_regions = ["na", "ap", "eu", "br", "kr", "latam"] # regions for valorant api
 
 def print_art() -> None:
     """Print ASCII art banner for the script."""
@@ -110,8 +111,7 @@ def split_riot_id(riot_id: str) -> Optional[tuple[str, str]]:
     return name, tag
 
 
-def from_endpoint(region: str, name: str, tag: str, base: str, endpoint: str, api_key: str, timeout: float = 5.0) -> dict[str, str]:
-    
+def from_endpoint(region: str, name: str, tag: str, base: str, endpoint: str, api_key: str, timeout: float = 5.0) -> dict | str | None:  
     """currently just get puuid from riot id via endpoint:
     /riot/account/v1/accounts/by-riot-id/{gameName}/{tagLine}
 
@@ -125,9 +125,10 @@ def from_endpoint(region: str, name: str, tag: str, base: str, endpoint: str, ap
     - api_key: api key from .env
     - timeout: network timeout in seconds
 
-    Returns:
-    - all data from the endpoint parsed from JSON on success (usually a dict)
-    - None on failure
+        Returns:
+        - on success: the data parsed from JSON (often a dict) or raw text if JSON
+            parsing fails.
+        - on failure: a dict with error details (e.g. {"error": True, "type": ..., "message": ...}).
 
     Important details:
     - We URL-quote the name and tag to make them safe for use in
@@ -172,24 +173,48 @@ def from_endpoint(region: str, name: str, tag: str, base: str, endpoint: str, ap
                 return text
 
     except urllib.error.HTTPError as e:
-        # HTTPError is raised for HTTP status codes like 4xx and 5xx. The
-        # exception object behaves like a response so we attempt to read its
-        # body to provide more helpful diagnostics.
+        # HTTP errors (4xx/5xx). Read the response body and return it. Riot
+        # commonly returns a JSON body like {"status": {"message": "Forbidden", "status_code": 401}}
+        # — we want to return that parsed JSON directly so callers get the
+        # same structure the API provided.
         try:
             body = e.read().decode("utf-8", errors="replace")
         except Exception:
             body = ""
-        print(f"HTTP error {e.code}: {e.reason}\n{body}", file=sys.stderr)
-    except urllib.error.URLError as e:
-        # URLError is raised for problems like DNS failures or refused
-        # connections.
-        print(f"Network error: {e.reason}", file=sys.stderr)
-    except Exception as e:
-        # Catch-all for anything unexpected; printing to stderr so callers
-        # can distinguish normal output from errors.
-        print(f"Unexpected error: {e}", file=sys.stderr)
 
-    return None
+        # Try to parse the body as JSON and return the resulting object.
+        try:
+            parsed = json.loads(body) if body else {"body": body}
+            # Also log a short message to stderr for visibility.
+            print(f"HTTP error {getattr(e, 'code', '')}: {getattr(e, 'reason', '')}", file=sys.stderr)
+            return parsed
+        except json.JSONDecodeError:
+            # If parsing fails, return a dict containing the raw body so
+            # callers always receive a dict/object rather than None or raw text.
+            print(f"HTTP error {getattr(e, 'code', '')}: {getattr(e, 'reason', '')} - non-JSON body", file=sys.stderr)
+            return {"body": body}
+    except urllib.error.URLError as e:
+        # Network-level errors (DNS failures, refused connections, etc.).
+        # There's no HTTP response body to parse here, but return a dict
+        # with a 'body' key so callers receive the same shape as the
+        # HTTPError path (i.e., a dict/object).
+        reason = getattr(e, "reason", "")
+        msg = f"Network error: {reason}"
+        print(msg, file=sys.stderr)
+        # If reason is a bytes/JSON-like string, try parsing; otherwise
+        # return a dict with 'body' to keep the return type consistent.
+        try:
+            parsed = json.loads(str(reason)) if reason else {"body": str(reason)}
+            return parsed
+        except Exception:
+            return {"body": str(reason)}
+    except Exception as e:
+        # Fallback for any other unexpected error. Return a dict with a
+        # 'body' key containing the exception message so callers get a
+        # consistent dict/object response shape.
+        msg = f"Unexpected error: {e}"
+        print(msg, file=sys.stderr)
+        return {"body": str(e)}
 
 def get_user_input() -> Tuple[str, str, str]:
     """asks for region, riot id (name#tag), and returns them as a tuple.
@@ -199,13 +224,13 @@ def get_user_input() -> Tuple[str, str, str]:
     # region prompt loop, only accepts americas, asia, europe
     while True:
         try:
-            region = input(f"what is the region {VALID_REGIONS}: ").strip().lower()
+            region = input(f"what is the region {puuid_regions}: ").strip().lower()
         except (KeyboardInterrupt, EOFError):
             print("\n\nprogram was aborted.\n")
             raise SystemExit(1)
-        if region in VALID_REGIONS:
+        if region in puuid_regions:
             break
-        print(f"\n{region} is an invalid region. expected {VALID_REGIONS}")
+        print(f"\n{region} is an invalid region. expected {puuid_regions}")
 
     print()  # add a blank line between prompts
 
